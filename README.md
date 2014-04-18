@@ -1,16 +1,10 @@
-ps3
-===
+CS4414-Project
+==============
 
-Starting code for Problem Set 3 of CS4414.  
+This is multiplayer DrawSomething-like command line based game.
 
-Includes:
-
-- zhtta.rs: starting code for Zhtta web server.
-
-- gash.rs: reference solution for PS2, that you can use for your
-  embedded shell (but feel free to use your own gash if you prefer).
-
-- zhtta-test.txt: list of test URLs
-
-- www/index.shtml: a simple test file
-
+Team Members
+============
+Man Wang
+Hangchen Qu
+Zihao Wang
