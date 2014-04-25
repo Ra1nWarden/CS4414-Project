@@ -1,0 +1,46 @@
+Felix_the_cat,true
+banana,true
+batman,true
+bear,true
+butterfly,true
+camel,true
+cat,true
+cow,true
+dear,true
+dinosaur,true
+dog,true
+dolphin,true
+donald_duck,true
+eagle,true
+elephant,true
+fish,true
+frog,true
+hello_kitty,true
+horse,true
+icecream,true
+lady,true
+linux,true
+lion_king,true
+micky_mouse,true
+mona_lisa,true
+pikachu,true
+playboy,true
+rabbit,true
+recycle,true
+snake,true
+south_path,true
+spider,true
+spongebob,true
+superman,true
+swans,true
+unicorn,true
+gcc,false
+rust,false
+seg fault,false
+cache,false
+scheduling,false
+kernel,false
+shell,false
+operating system,false
+system calls,false
+goto,false

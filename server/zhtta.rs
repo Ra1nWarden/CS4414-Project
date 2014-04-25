@@ -27,6 +27,8 @@ use extra::arc::MutexArc;
 
 static SERVER_NAME : &'static str = "Zhtta Version 0.5";
 
+static PENDING_PATH : &'static str = "/Users/zihaowang/Dropbox/Documents/UVa/Spring 2014/CS 4414/CS4414-Project/server/pending";
+
 static IP : &'static str = "127.0.0.1";
 static PORT : uint = 4414;
 
@@ -53,6 +55,7 @@ struct WebServer {
     shared_notify_chan: SharedChan<()>,
 
     user_map: MutexArc<HashMap<~str, ~str>>,
+    qustion_map: MutexArc<HashMap<~str, bool>>,
 }
 
 impl WebServer {
@@ -69,6 +72,19 @@ impl WebServer {
                 user_map.insert(user_tuple[0].to_owned(), user_tuple[1].to_owned());
             }
         }
+        let question_file_reader = File::open(&Path::new("questions.txt")).expect("Invalid file");
+        let questions : ~[&str] = question_file_reader.read_to_str().to_owned().split('\n').collect();
+        let mut problem_map : HashMap<~str, bool> = HashMap::new();
+        for each_question in questions.iter() {
+            let each_line : ~str = each_question.to_owned().to_owned();
+            let question_tuple : ~[&str] = each_line.split(',').collect();
+            if question_tuple.len() == 2 {
+                match question_tuple[1].to_owned() {
+                    "true" => problem_map.insert(question_tuple[0].to_owned(), true),
+                    "false" => problem_map.insert(question_tuple[0].to_owned(), false),
+                };
+            }
+        }
         WebServer {
             ip: ip.to_owned(),
             port: port,
@@ -80,6 +96,7 @@ impl WebServer {
             shared_notify_chan: shared_notify_chan,  
 
             user_map: MutexArc::new(user_map),
+            question_map: MutexArc::new(problem_map),
         }
     }
     
@@ -152,6 +169,13 @@ impl WebServer {
                             debug!("username is {:s}", username);
                             debug!("password is {:s}", password);
                             WebServer::login_user(stream, username, password, user_map);
+                        } else if path_str.starts_with("./retrieve") {
+                            debug!("======retrieve brach=======");
+                            let username : &str = path_str.slice_from(20);
+                            WebServer::retrieve_question(stream, username);
+                        } else if path_str.starts_with("./new_round") {
+                            debug!("======generating new word====");
+                            WebServer::generate_new_word(stream);
                         } else { 
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -182,13 +206,27 @@ impl WebServer {
                     None => received_stream.write(HTTP_BAD.as_bytes()),
                 };
         });
-        
-        // match (username, password) {
-        //     ("admin", "admin") => { stream.write(HTTP_OK.as_bytes());
-        //                             stream.write("test".as_bytes())
-        //     },
-        //     (_, _) => stream.write(HTTP_BAD.as_bytes()),
-        // };
+    }
+    
+    fn retrieve_question(stream: Option<std::io::net::tcp::TcpStream>, username: &str) {
+        let mut stream = stream;
+        let file_path = &Path::new(PENDING_PATH + "/" + username.to_owned() + ".txt");
+        match file_path.exists() {
+            true => { let mut file_content = File::open(&Path::new(file_path));
+                      stream.write(HTTP_OK.as_bytes());
+                      stream.write(file_content.read_to_end());
+            },
+            false => { debug!("does not exist"); 
+                       File::create(file_path);
+                       stream.write(HTTP_BAD.as_bytes());
+            },
+        };
+        let mut erase_file = File::open_mode(file_path, Truncate, Write);
+        erase_file.write_str(&"");
+    }
+
+    fn generate_new_word(stream: Option<std::io::net::tcp::TcpStream>) {
+        let mut stream = stream;
     }
     
     // TODO: Streaming file.

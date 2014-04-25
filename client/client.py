@@ -12,6 +12,8 @@ class CommandReader:
             password_entry = raw_input("Password: ")
             if self.login(username_entry, password_entry):
                 self.username = username_entry
+            else:
+                print "Invalid username/password combination!"
         self.prompt()
     def prompt(self):
         while True:
@@ -20,7 +22,7 @@ class CommandReader:
             print "2. Send a question"
             print "3. View friend list"
             print "4. Exit"
-            input_option = raw_input("Please enter your selection: ").trim()
+            input_option = raw_input("Please enter your selection: ").strip()
             if input_option == "1":
                 self.retrieve_msg()
             elif input_option == "2":
@@ -39,12 +41,17 @@ class CommandReader:
         r = requests.get(address + '/login', params=args)
         return r.status_code == 200
 
-    # def retrieve_msg(self):
-    #     args = {}
-    #     args['username'] = self.username
-    #     r = requests.get(address + '/retrieve', params=args)
+    def retrieve_msg(self):
+        args = {}
+        args['username'] = self.username
+        r = requests.get(address + '/retrieve', params=args)
+        if r.status_code == 200 and r.text != "":
+            print r.text
+        else:
+            print "No pending turns for you."
     
     # def send_msg(self):
+    #     r = requests.get(address + '/new_round')
     #     recipient = raw_input("Please enter the name of the recipient (Enter ? to see your friend list): ")
         
 
