@@ -29,7 +29,6 @@ static SERVER_NAME : &'static str = "Zhtta Version 0.5";
 
 static IP : &'static str = "127.0.0.1";
 static PORT : uint = 4414;
-static WWW_DIR : &'static str = "./www";
 
 static HTTP_OK : &'static str = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n";
 static HTTP_BAD : &'static str = "HTTP/1.1 404 Not Found\r\n\r\n";
@@ -46,31 +45,41 @@ struct HTTP_Request {
 struct WebServer {
     ip: ~str,
     port: uint,
-    www_dir_path: ~Path,
     
     request_queue_arc: MutexArc<~[HTTP_Request]>,
     stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>,
     
     notify_port: Port<()>,
     shared_notify_chan: SharedChan<()>,
+
+    user_map: MutexArc<HashMap<~str, ~str>>,
 }
 
 impl WebServer {
-    fn new(ip: &str, port: uint, www_dir: &str) -> WebServer {
+    fn new(ip: &str, port: uint) -> WebServer {
         let (notify_port, shared_notify_chan) = SharedChan::new();
-        let www_dir_path = ~Path::new(www_dir);
-        os::change_dir(www_dir_path.clone());
-
+        let mut user_file_reader = File::open(&Path::new("users.txt")).expect("Invliad file");
+        let content : ~str = user_file_reader.read_to_str().to_owned();
+        let entries : ~[&str] = content.split('\n').collect();
+        let mut user_map : HashMap<~str, ~str> = HashMap::new();
+        for each_user in entries.iter() {
+            let each_line : ~str = each_user.to_owned().to_owned();
+            let user_tuple : ~[&str] = each_line.split(',').collect();
+            if user_tuple.len() == 2 {
+                user_map.insert(user_tuple[0].to_owned(), user_tuple[1].to_owned());
+            }
+        }
         WebServer {
             ip: ip.to_owned(),
             port: port,
-            www_dir_path: www_dir_path,
                         
             request_queue_arc: MutexArc::new(~[]),
             stream_map_arc: MutexArc::new(HashMap::new()),
             
             notify_port: notify_port,
-            shared_notify_chan: shared_notify_chan,        
+            shared_notify_chan: shared_notify_chan,  
+
+            user_map: MutexArc::new(user_map),
         }
     }
     
@@ -81,16 +90,16 @@ impl WebServer {
     
     fn listen(&mut self) {
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
-        let www_dir_path_str = self.www_dir_path.as_str().expect("invalid www path?").to_owned();
         
         let request_queue_arc = self.request_queue_arc.clone();
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
+        let user_map_arc = self.user_map.clone();
                 
         spawn(proc() {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
-            println!("{:s} listening on {:s} (serving from: {:s}).", 
-                     SERVER_NAME, addr.to_str(), www_dir_path_str);
+            println!("{:s} listening on {:s}.", 
+                     SERVER_NAME, addr.to_str());
             
             for stream in acceptor.incoming() {
                 let (queue_port, queue_chan) = Chan::new();
@@ -98,14 +107,13 @@ impl WebServer {
                 
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
+                let user_map = user_map_arc.clone();
                 
                 // Spawn a task to handle the connection.
                 spawn(proc() {
                     let request_queue_arc = queue_port.recv();
                   
                     let mut stream = stream;
-                    
-                    let peer_name = WebServer::get_peer_name(&mut stream);
                     
                     let mut buf = [0, ..700];
                     stream.read(buf);
@@ -143,11 +151,7 @@ impl WebServer {
                             }
                             debug!("username is {:s}", username);
                             debug!("password is {:s}", password);
-                            WebServer::login_user(stream, username, password);
-                        } else if ext_str == "shtml" { // Dynamic web pages.
-                            debug!("===== Dynamic Page request =====");
-                            WebServer::respond_with_dynamic_page(stream, path_obj);
-                            debug!("=====Terminated connection from [{:s}].=====", peer_name);
+                            WebServer::login_user(stream, username, password, user_map);
                         } else { 
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -158,14 +162,33 @@ impl WebServer {
         });
     }
 
-    fn login_user(stream: Option<std::io::net::tcp::TcpStream>, username: &str, password: &str) {
-        let mut stream = stream;
-        match (username, password) {
-            ("admin", "admin") => { stream.write(HTTP_OK.as_bytes());
-                                    stream.write("test".as_bytes())
-            },
-            (_, _) => stream.write(HTTP_BAD.as_bytes()),
-        };
+    fn login_user(stream: Option<std::io::net::tcp::TcpStream>, username: &str, password: &str, user_map: MutexArc<HashMap<~str, ~str>>) {
+        let (username_port, username_chan) = Chan::new();
+        let (password_port, password_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
+        username_chan.send(username.to_owned().clone());
+        password_chan.send(password.to_owned().clone());
+        stream_chan.send(stream);
+        user_map.access(|local_user_map| {
+            let received_name = username_port.recv();
+            let received_pass = password_port.recv();
+            let mut received_stream = stream_port.recv();
+            match local_user_map.find(&received_name.to_owned()) {
+                    Some(stored_pass) => if stored_pass.to_owned() == received_pass.to_owned() {
+                        received_stream.write(HTTP_OK.as_bytes());
+                    } else {
+                        received_stream.write(HTTP_BAD.as_bytes());
+                    },
+                    None => received_stream.write(HTTP_BAD.as_bytes()),
+                };
+        });
+        
+        // match (username, password) {
+        //     ("admin", "admin") => { stream.write(HTTP_OK.as_bytes());
+        //                             stream.write("test".as_bytes())
+        //     },
+        //     (_, _) => stream.write(HTTP_BAD.as_bytes()),
+        // };
     }
     
     // TODO: Streaming file.
@@ -175,12 +198,6 @@ impl WebServer {
         let mut file_reader = File::open(path).expect("Invalid file!");
         stream.write(HTTP_OK.as_bytes());
         stream.write(file_reader.read_to_end());
-    }
-    
-    // TODO: Server-side gashing.
-    fn respond_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path: &Path) {
-        // for now, just serve as static file
-        WebServer::respond_with_static_file(stream, path);
     }
     
     // TODO: Smarter Scheduling.
@@ -270,12 +287,11 @@ impl WebServer {
     }
 }
 
-fn get_args() -> (~str, uint, ~str) {
+fn get_args() -> (~str, uint) {
     fn print_usage(program: &str) {
         println!("Usage: {:s} [options]", program);
         println!("--ip     \tIP address, \"{:s}\" by default.", IP);
         println!("--port   \tport number, \"{:u}\" by default.", PORT);
-        println!("--www    \tworking directory, \"{:s}\" by default", WWW_DIR);
         println("-h --help \tUsage");
     }
     
@@ -286,7 +302,6 @@ fn get_args() -> (~str, uint, ~str) {
     let opts = ~[
         getopts::optopt("ip"),
         getopts::optopt("port"),
-        getopts::optopt("www"),
         getopts::optflag("h"),
         getopts::optflag("help")
     ];
@@ -313,15 +328,11 @@ fn get_args() -> (~str, uint, ~str) {
                         PORT
                     };
     
-    let www_dir_str = if matches.opt_present("www") {
-                        matches.opt_str("www").expect("invalid www argument?") 
-                      } else { WWW_DIR.to_owned() };
-    
-    (ip_str, port, www_dir_str)
+    (ip_str, port)
 }
 
 fn main() {
-    let (ip_str, port, www_dir_str) = get_args();
-    let mut zhtta = WebServer::new(ip_str, port, www_dir_str);
+    let (ip_str, port) = get_args();
+    let mut zhtta = WebServer::new(ip_str, port);
     zhtta.run();
 }
