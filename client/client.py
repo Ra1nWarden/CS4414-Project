@@ -52,7 +52,26 @@ class CommandReader:
     
     def send_msg(self):
         r = requests.get(address + '/new_round')
+        print "Your word is: "
         print r.text
+        print "Enter 1 to generate possible ASCII art"
+        print "Enter 2 to write your own"
+        print "Enter 0 to get a new word"
+        choice = raw_input("Your choice: ").strip()
+        if choice == "1":
+            args = {}
+            args['key'] = r.text
+            art_request = requests.get(address + '/get_ascii_art', params=args)
+            if art_request.status_code == 200:
+                print art_request.text
+            else:
+                print "Sorry, no available ASCII art :("
+        elif choice == "2":
+            print "2"
+        elif choice == "0":
+            self.send_msg()
+        else:
+            print "Invalid command!"
         # recipient = raw_input("Please enter the name of the recipient: ")
         
 

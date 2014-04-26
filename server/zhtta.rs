@@ -30,6 +30,8 @@ static SERVER_NAME : &'static str = "Zhtta Version 0.5";
 
 static PENDING_PATH : &'static str = "/Users/zihaowang/Dropbox/Documents/UVa/Spring 2014/CS 4414/CS4414-Project/server/pending";
 
+static ASCII_ART_PATH : &'static str = "/Users/zihaowang/Dropbox/Documents/UVa/Spring 2014/CS 4414/CS4414-Project/server/ascii_art";
+
 static IP : &'static str = "127.0.0.1";
 static PORT : uint = 4414;
 
@@ -136,7 +138,7 @@ impl WebServer {
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
                 let user_map = user_map_arc.clone();
-                let question_map = user_map_arc.clone();
+                let question_map = question_map_arc.clone();
                 let questions = questions_arc.clone();
                 
                 // Spawn a task to handle the connection.
@@ -189,6 +191,10 @@ impl WebServer {
                         } else if path_str.starts_with("./new_round") {
                             debug!("======generating new word====");
                             WebServer::generate_new_word(stream, questions);
+                        } else if path_str.starts_with("./get_ascii_art") {
+                            debug!("======generating ascii art=====");
+                            let word : ~str = path_str.slice_from(20).to_owned().clone();
+                            WebServer::generate_ascii_art(stream, question_map, word);
                         } else { 
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -239,7 +245,6 @@ impl WebServer {
     }
 
     fn generate_new_word(stream: Option<std::io::net::tcp::TcpStream>, questions: MutexArc<~[~str]>) {
-        let mut stream = stream;
         let (stream_port, stream_chan) = Chan::new();
         stream_chan.send(stream);
         questions.access(|question_list| {
@@ -251,6 +256,24 @@ impl WebServer {
             received_stream.write(HTTP_OK.as_bytes());
             received_stream.write(generated_word.as_bytes());
         });
+    }
+
+    fn generate_ascii_art(stream: Option<std::io::net::tcp::TcpStream>, question_map: MutexArc<HashMap<~str, bool>>, word: ~str) {
+        let mut stream = stream;
+        let (word_port, word_chan) = Chan::new();
+        word_chan.send(word.clone());
+        let contains_art : bool = question_map.access(|local_question_map| {
+            let received_word = word_port.recv();
+            *local_question_map.get(&received_word.to_owned())
+        });
+        match contains_art {
+            true => { let file_path = &Path::new(ASCII_ART_PATH + "/" + word.clone() + ".txt");
+                      let mut file_content = File::open(&Path::new(file_path));
+                      stream.write(HTTP_OK.as_bytes());
+                      stream.write(file_content.read_to_end());
+            },
+            false => stream.write(HTTP_BAD.as_bytes()),
+        };
     }
     
     // TODO: Streaming file.
