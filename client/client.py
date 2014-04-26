@@ -50,9 +50,10 @@ class CommandReader:
         else:
             print "No pending turns for you."
     
-    # def send_msg(self):
-    #     r = requests.get(address + '/new_round')
-    #     recipient = raw_input("Please enter the name of the recipient (Enter ? to see your friend list): ")
+    def send_msg(self):
+        r = requests.get(address + '/new_round')
+        print r.text
+        # recipient = raw_input("Please enter the name of the recipient: ")
         
 
     # def view_friends(self):

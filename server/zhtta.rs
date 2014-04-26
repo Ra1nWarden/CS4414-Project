@@ -21,6 +21,7 @@ use std::io::net::ip::{SocketAddr};
 use std::{os, str, libc, from_str};
 use std::path::Path;
 use std::hashmap::HashMap;
+use std::rand::random;
 
 use extra::getopts;
 use extra::arc::MutexArc;
@@ -55,7 +56,9 @@ struct WebServer {
     shared_notify_chan: SharedChan<()>,
 
     user_map: MutexArc<HashMap<~str, ~str>>,
-    qustion_map: MutexArc<HashMap<~str, bool>>,
+    question_map: MutexArc<HashMap<~str, bool>>,
+
+    questions: MutexArc<~[~str]>,
 }
 
 impl WebServer {
@@ -72,17 +75,21 @@ impl WebServer {
                 user_map.insert(user_tuple[0].to_owned(), user_tuple[1].to_owned());
             }
         }
-        let question_file_reader = File::open(&Path::new("questions.txt")).expect("Invalid file");
-        let questions : ~[&str] = question_file_reader.read_to_str().to_owned().split('\n').collect();
+        let mut question_file_reader = File::open(&Path::new("questions.txt")).expect("Invalid file");
+        let question_content : ~str = question_file_reader.read_to_str().to_owned();
+        let questions : ~[&str] = question_content.split('\n').collect();
         let mut problem_map : HashMap<~str, bool> = HashMap::new();
+        let mut problems : ~[~str] = ~[];
         for each_question in questions.iter() {
             let each_line : ~str = each_question.to_owned().to_owned();
             let question_tuple : ~[&str] = each_line.split(',').collect();
             if question_tuple.len() == 2 {
                 match question_tuple[1].to_owned() {
-                    "true" => problem_map.insert(question_tuple[0].to_owned(), true),
-                    "false" => problem_map.insert(question_tuple[0].to_owned(), false),
+                    ~"true" => problem_map.insert(question_tuple[0].to_owned(), true),
+                    ~"false" => problem_map.insert(question_tuple[0].to_owned(), false),
+                    _ => true,
                 };
+                problems.push(question_tuple[0].to_owned());
             }
         }
         WebServer {
@@ -97,6 +104,8 @@ impl WebServer {
 
             user_map: MutexArc::new(user_map),
             question_map: MutexArc::new(problem_map),
+
+            questions: MutexArc::new(problems),
         }
     }
     
@@ -112,6 +121,8 @@ impl WebServer {
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
         let user_map_arc = self.user_map.clone();
+        let question_map_arc = self.question_map.clone();
+        let questions_arc = self.questions.clone();
                 
         spawn(proc() {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
@@ -125,6 +136,8 @@ impl WebServer {
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
                 let user_map = user_map_arc.clone();
+                let question_map = user_map_arc.clone();
+                let questions = questions_arc.clone();
                 
                 // Spawn a task to handle the connection.
                 spawn(proc() {
@@ -175,7 +188,7 @@ impl WebServer {
                             WebServer::retrieve_question(stream, username);
                         } else if path_str.starts_with("./new_round") {
                             debug!("======generating new word====");
-                            WebServer::generate_new_word(stream);
+                            WebServer::generate_new_word(stream, questions);
                         } else { 
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -225,8 +238,19 @@ impl WebServer {
         erase_file.write_str(&"");
     }
 
-    fn generate_new_word(stream: Option<std::io::net::tcp::TcpStream>) {
+    fn generate_new_word(stream: Option<std::io::net::tcp::TcpStream>, questions: MutexArc<~[~str]>) {
         let mut stream = stream;
+        let (stream_port, stream_chan) = Chan::new();
+        stream_chan.send(stream);
+        questions.access(|question_list| {
+            let mut received_stream = stream_port.recv();
+            let list_length : f32 = question_list.len() as f32;
+            let rand_fact = random::<f32>();
+            let rand_index : uint = (list_length * rand_fact) as uint;
+            let generated_word = question_list[rand_index].clone();
+            received_stream.write(HTTP_OK.as_bytes());
+            received_stream.write(generated_word.as_bytes());
+        });
     }
     
     // TODO: Streaming file.
