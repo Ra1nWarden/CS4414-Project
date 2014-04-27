@@ -1,0 +1,6 @@
+sender: zihao
+key: rust
+language+by+mozila%0A
+sender: zihao
+key: micky_mouse
+disney+mouse%0A
