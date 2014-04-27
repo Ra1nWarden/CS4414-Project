@@ -3,6 +3,7 @@ import datetime
 from subprocess import call
 import os
 import time
+import string
 
 address = "http://127.0.0.1:4414"
 
@@ -49,9 +50,40 @@ class CommandReader:
         args['username'] = self.username
         r = requests.get(address + '/retrieve', params=args)
         if r.status_code == 200 and r.text != "":
-            print r.text
+            lines = r.text.split('\n')
+            question_counts = len(lines) / 3
+            print "You have " + str(question_counts) + " pending questions: "
+            for i in range(0, question_counts):
+                print "Now displaying question from " + lines[3 * i + 0] + ": "
+                answer = string.replace(lines[3 * i + 1], "+", " ")
+                answer = string.replace(answer, "%0A", "\n")
+                question_content = string.replace(lines[3 * i + 2], "+", " ")
+                question_content = string.replace(question_content, "%0A", "\n")
+                if question_content == "ASCII":
+                    new_args = {}
+                    new_args['key'] = string.replace(answer, " ", "_")
+                    art_request = requests.get(address + '/get_ascii_art', params=new_args)
+                    print art_request.text
+                else:
+                    print question_content
+                num_words = max(len(answer.split('_')), len(answer.split(' ')))
+                print "(Hint: " + str(num_words) + " words)"
+                correct = False
+                while not correct:
+                    input_ans = raw_input("Your guess is: ")
+                    if input_ans == "give up":
+                        break
+                    correct = string.replace(input_ans, " ", "_") == string.replace(answer, " ", "_")
+                    if not correct:
+                        print "Incorrect. Please try again. You can give up by typing \"give up\""
+                if correct:
+                    print "Correct!"
+                    add_point = requests.post(address + '/add', params=args)
+                else:
+                    print "You have given up."
+                    deduct_point = requests.post(address + '/deduct', params=args)
         else:
-            print "No pending turns for you."
+            print "No pending turns for you. You can start a new round! :)"
 
     def send_msg(self):
         r = requests.get(address + '/new_round')
@@ -66,7 +98,7 @@ class CommandReader:
             choice = raw_input("Your choice: ").strip()
         if choice == "1":
             args = {}
-            args['key'] = r.text
+            args['key'] = string.replace(r.text, " ", "_")
             art_request = requests.get(address + '/get_ascii_art', params=args)
             if art_request.status_code == 200:
                 print art_request.text

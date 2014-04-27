@@ -20,6 +20,7 @@ use std::{os, str, libc, from_str};
 use std::path::Path;
 use std::hashmap::HashMap;
 use std::rand::random;
+use std::from_str::from_str;
 
 use extra::getopts;
 use extra::arc::MutexArc;
@@ -59,6 +60,7 @@ struct WebServer {
     question_map: MutexArc<HashMap<~str, bool>>,
 
     questions: MutexArc<~[~str]>,
+    point_map: MutexArc<HashMap<~str, int>>,
 }
 
 impl WebServer {
@@ -92,6 +94,17 @@ impl WebServer {
                 problems.push(question_tuple[0].to_owned());
             }
         }
+        let mut points_file_reader = File::open(&Path::new("points.txt")).expect("Invalid file");
+        let points_content : ~str = points_file_reader.read_to_str().to_owned();
+        let points_entries : ~[&str] = points_content.split('\n').collect();
+        let mut points_map : HashMap<~str, int> = HashMap::new();
+        for each_points_entry in points_entries.iter() {
+            let each_line : ~str = each_points_entry.to_owned().to_owned();
+            let points_tuple : ~[&str] = each_line.split(',').collect();
+            if points_tuple.len() == 2 {
+                points_map.insert(points_tuple[0].to_owned(), from_str::<int>(points_tuple[1]).unwrap());
+            }
+        }
         WebServer {
             ip: ip.to_owned(),
             port: port,
@@ -106,6 +119,7 @@ impl WebServer {
             question_map: MutexArc::new(problem_map),
 
             questions: MutexArc::new(problems),
+            point_map: MutexArc::new(points_map),
         }
     }
 
@@ -123,6 +137,7 @@ impl WebServer {
         let user_map_arc = self.user_map.clone();
         let question_map_arc = self.question_map.clone();
         let questions_arc = self.questions.clone();
+        let points_map_arc = self.point_map.clone();
 
         spawn(proc() {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
@@ -138,6 +153,8 @@ impl WebServer {
                 let user_map = user_map_arc.clone();
                 let question_map = question_map_arc.clone();
                 let questions = questions_arc.clone();
+                let point_map1 = points_map_arc.clone();
+                let point_map2 = points_map_arc.clone();
 
                 // Spawn a task to handle the connection.
                 spawn(proc() {
@@ -218,6 +235,16 @@ impl WebServer {
                             }
                             debug!("===finished parsing arguments===");
                             WebServer::upload_question(stream, recipient, sender, key_word, ascii_option, content);
+                        } else if path_str.starts_with("./add") {
+                            debug!("======adding points=====");
+                            let username : &str = path_str.slice_from(15);
+                            WebServer::add_points_to_user(stream, username, point_map1);
+                            WebServer::update_points_table(point_map2);
+                        } else if path_str.starts_with("./deduct") {
+                            debug!("=======deducting points=====");
+                            let username : &str = path_str.slice_from(18);
+                            WebServer::deduct_points_to_user(stream, username, point_map1);
+                            WebServer::update_points_table(point_map2);
                         } else {
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -225,6 +252,20 @@ impl WebServer {
                     }
                 });
             }
+        });
+    }
+
+    fn update_points_table(point_map: MutexArc<HashMap<~str, int>>) {
+        point_map.access(|local_point_map| {
+            let mut result_str : ~str = ~"";
+            for (k, v) in local_point_map.iter() {
+                result_str = result_str.append(k.clone());
+                result_str = result_str.append(&",");
+                result_str = result_str.append(v.to_str());
+                result_str = result_str.append(&"\n");
+            }
+            let mut points_file_writer = File::open_mode(&Path::new("points.txt"), Truncate, ReadWrite);
+            points_file_writer.write_str(result_str);
         });
     }
 
@@ -316,10 +357,9 @@ impl WebServer {
 
     fn upload_question(stream: Option<std::io::net::tcp::TcpStream>, recipient: &str, sender: &str, key_word: &str, ascii_option: &str, content: &str) {
         let mut stream = stream;
-        let mut str_content : ~str = ~"sender: ";
+        let mut str_content : ~str = ~"";
         str_content = str_content.append(sender);
         str_content = str_content.append(&"\n");
-        str_content = str_content.append(&"key: ");
         str_content = str_content.append(key_word);
         str_content = str_content.append(&"\n");
         debug!("content is {}", content);
@@ -344,6 +384,50 @@ impl WebServer {
                        stream.write(HTTP_OK.as_bytes());
             },
         };
+    }
+
+    fn deduct_points_to_user(stream: Option<std::io::net::tcp::TcpStream>, username: &str, point_map: MutexArc<HashMap<~str, int>>) {
+        let (username_port, username_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
+        username_chan.send(username.to_owned());
+        stream_chan.send(stream);
+        point_map.access(|local_points| {
+            let received_name = username_port.recv();
+            let mut received_stream = stream_port.recv();
+            let local_map_copy = local_points.clone();
+            match local_map_copy.find(&received_name) {
+                Some(point) => { let new_point : int = point - 1;
+                                 local_points.insert(received_name.to_owned(), new_point);
+                                 received_stream.write(HTTP_OK.as_bytes());
+                },
+                None => { let start_point : int = 1;
+                          local_points.insert(received_name.to_owned(), start_point);
+                          received_stream.write(HTTP_OK.as_bytes());
+                },
+            };
+        });
+    }
+
+    fn add_points_to_user(stream: Option<std::io::net::tcp::TcpStream>, username: &str, point_map: MutexArc<HashMap<~str, int>>) {
+        let (username_port, username_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
+        username_chan.send(username.to_owned());
+        stream_chan.send(stream);
+        point_map.access(|local_points| {
+            let received_name = username_port.recv();
+            let mut received_stream = stream_port.recv();
+            let local_map_copy = local_points.clone();
+            match local_map_copy.find(&received_name) {
+                Some(point) => { let new_point : int = point + 2;
+                                 local_points.insert(received_name.to_owned(), new_point);
+                                 received_stream.write(HTTP_OK.as_bytes());
+                },
+                None => { let start_point : int = 2;
+                          local_points.insert(received_name.to_owned(), start_point);
+                          received_stream.write(HTTP_OK.as_bytes());
+                },
+            };
+        });
     }
 
     // TODO: Streaming file.
