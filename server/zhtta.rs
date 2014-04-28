@@ -21,6 +21,7 @@ use std::path::Path;
 use std::hashmap::HashMap;
 use std::rand::random;
 use std::from_str::from_str;
+use std::io::{File, Open, Read, Write, ReadWrite};
 
 use extra::getopts;
 use extra::arc::MutexArc;
@@ -199,6 +200,24 @@ impl WebServer {
                             debug!("username is {:s}", username);
                             debug!("password is {:s}", password);
                             WebServer::login_user(stream, username, password, user_map);
+                        } else if path_str.starts_with("./regst") {
+                            debug!("=====register branch====");
+                            
+                            let args_vec : ~[&str] = path_str.slice_from(8).split('&').collect();
+                            let mut username : &str = &"";
+                            let mut password : &str = &"";
+                            for each in args_vec.iter() {
+                                let splitted_pair : ~[&str] = each.split('=').collect();
+                                match splitted_pair[0] {
+                                    "username" => username = splitted_pair[1],
+                                    "password" => password = splitted_pair[1],
+                                            _ => (),
+                                };
+                            }
+                            debug!("username is {:s}", username);
+                            debug!("password is {:s}", password);
+                            WebServer::register_user(username, password, user_map);
+
                         } else if path_str.starts_with("./retrieve") {
                             debug!("======retrieve brach=======");
                             let username : &str = path_str.slice_from(20);
@@ -288,6 +307,35 @@ impl WebServer {
                     },
                     None => received_stream.write(HTTP_BAD.as_bytes()),
                 };
+        });
+    }
+
+    fn register_user(username: &str, password: &str, user_map: MutexArc<HashMap<~str, ~str>>) {
+
+        /* add new acount info to users.txt */
+        let path_to_users_file = Path::new("users.txt");
+
+        let mut file = match File::open_mode(&path_to_users_file, Open, Write) {
+            Some(s) => s,
+            None => fail!("Users file could not be opened!")
+        };
+        let mut file_read = match File::open_mode(&path_to_users_file, Open, Read) {
+            Some(s) => s,
+            None => fail!("Users file could not be opened!")
+        };
+
+        file.write_line(file_read.read_to_str()+username.to_owned().clone() + "," + password.to_owned().clone());
+        
+        /* add new account info to user_map */
+        let (username_port, username_chan) = Chan::new();
+        let (password_port, password_chan) = Chan::new();
+        username_chan.send(username.to_owned().clone());
+        password_chan.send(password.to_owned().clone());
+
+        user_map.access(|local_user_map| {
+            let received_name = username_port.recv();
+            let received_pass = password_port.recv();
+            local_user_map.insert(received_name.to_owned(), received_pass.to_owned());
         });
     }
 
