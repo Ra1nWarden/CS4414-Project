@@ -216,7 +216,7 @@ impl WebServer {
                             }
                             debug!("username is {:s}", username);
                             debug!("password is {:s}", password);
-                            WebServer::register_user(username, password, user_map);
+                            WebServer::register_user(stream, username, password, user_map);
 
                         } else if path_str.starts_with("./retrieve") {
                             debug!("======retrieve brach=======");
@@ -310,7 +310,7 @@ impl WebServer {
         });
     }
 
-    fn register_user(username: &str, password: &str, user_map: MutexArc<HashMap<~str, ~str>>) {
+    fn register_user(stream: Option<std::io::net::tcp::TcpStream>, username: &str, password: &str, user_map: MutexArc<HashMap<~str, ~str>>) {
 
         /* add new acount info to users.txt */
         let path_to_users_file = Path::new("users.txt");
@@ -329,13 +329,23 @@ impl WebServer {
         /* add new account info to user_map */
         let (username_port, username_chan) = Chan::new();
         let (password_port, password_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
         username_chan.send(username.to_owned().clone());
         password_chan.send(password.to_owned().clone());
-
+        stream_chan.send(stream);
         user_map.access(|local_user_map| {
             let received_name = username_port.recv();
             let received_pass = password_port.recv();
             local_user_map.insert(received_name.to_owned(), received_pass.to_owned());
+            let mut received_stream = stream_port.recv();
+            match local_user_map.find(&received_name.to_owned()) {
+                Some(stored_pass) => if stored_pass.to_owned() == received_pass.to_owned() {
+                    received_stream.write(HTTP_OK.as_bytes());
+                } else {
+                    received_stream.write(HTTP_BAD.as_bytes());
+                },
+                None => received_stream.write(HTTP_BAD.as_bytes()),
+            };
         });
     }
 

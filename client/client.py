@@ -11,6 +11,22 @@ class CommandReader:
     def __init__(self):
         self.username = None
     def run(self):
+        while True:
+            print "Menu"
+            print "1. log in"
+            print "2. sign up"
+            input_option = raw_input("Please enter your selection: ").strip()
+            if input_option == "1":
+                self.login_init()
+            elif input_option == "2":
+                username_entry = raw_input("Username: ")
+                password_entry = raw_input("Password: ")
+                self.register(username_entry, password_entry)
+                print "You've successfully registered and logged in!"
+                self.prompt()
+            else:
+                print "Invalid option!"
+    def login_init(self):
         while self.username is None:
             username_entry = raw_input("Username: ")
             password_entry = raw_input("Password: ")
@@ -44,6 +60,14 @@ class CommandReader:
         args['password'] = pword
         r = requests.get(address + '/login', params=args)
         return r.status_code == 200
+
+    def register(self, uname, pword):
+        args = {}
+        args['username'] = uname
+        args['password'] = pword
+        r = requests.get(address + '/regst', params=args)
+        return r.status_code == 200
+
 
     def retrieve_msg(self):
         args = {}
