@@ -13,8 +13,9 @@ class CommandReader:
     def run(self):
         while True:
             print "Menu"
-            print "1. log in"
-            print "2. sign up"
+            print "1. Log in"
+            print "2. Sign up"
+            print "3. Quit"
             input_option = raw_input("Please enter your selection: ").strip()
             if input_option == "1":
                 self.login_init()
@@ -24,6 +25,8 @@ class CommandReader:
                 self.register(username_entry, password_entry)
                 print "You've successfully registered and logged in!"
                 self.prompt()
+            elif input_option == "3":
+                break
             else:
                 print "Invalid option!"
     def login_init(self):
