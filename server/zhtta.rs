@@ -29,9 +29,10 @@ use extra::arc::MutexArc;
 static SERVER_NAME : &'static str = "Zhtta Version 0.5";
 
 //static PENDING_PATH : &'static str = "/Users/zihaowang/Dropbox/Documents/UVa/Spring 2014/CS 4414/CS4414-Project/server/pending";
-static PENDING_PATH : &'static str = "~/server/pending";
+// AWS Directory
+static PENDING_PATH : &'static str = "/home/ubuntu/server/pending";
 //static ASCII_ART_PATH : &'static str = "/Users/zihaowang/Dropbox/Documents/UVa/Spring 2014/CS 4414/CS4414-Project/server/ascii_art";
-static ASCII_ART_PATH : &'static str = "~/server/ascii_art";
+static ASCII_ART_PATH : &'static str = "/home/ubuntu/server/ascii_art";
 static IP : &'static str = "127.0.0.1";
 static PORT : uint = 4414;
 

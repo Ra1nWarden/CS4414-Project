@@ -6,7 +6,8 @@ import time
 import getpass
 import string
 
-address = "http://54.86.115.71:4414"
+# AWS address
+address = "http://54.86.118.42:80"
 
 class CommandReader:
     def __init__(self):
