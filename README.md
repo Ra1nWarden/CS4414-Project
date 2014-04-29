@@ -17,12 +17,15 @@ python client.py
 
 * `requests`
 
-`pip install requests`
+To install, do
+```
+pip install requests
+```
 
 Implementation Details
 ======================
 
-The server code is written in `Rust` based on [this](https://github.com/cs4414/ps3).
+The server code is written in `Rust` based on [Rust-class Problem Set 3 zhtta server](https://github.com/cs4414/ps3).
 The client side is written in `Python` using package [requests](http://docs.python-requests.org/en/latest/).
 
 Team Members
