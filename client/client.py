@@ -6,7 +6,7 @@ import time
 import getpass
 import string
 
-address = "http://127.0.0.1:4414"
+address = "http://54.86.115.71:4414"
 
 class CommandReader:
     def __init__(self):
