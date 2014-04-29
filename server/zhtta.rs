@@ -202,7 +202,7 @@ impl WebServer {
                             WebServer::login_user(stream, username, password, user_map);
                         } else if path_str.starts_with("./regst") {
                             debug!("=====register branch====");
-                            
+
                             let args_vec : ~[&str] = path_str.slice_from(8).split('&').collect();
                             let mut username : &str = &"";
                             let mut password : &str = &"";
@@ -264,6 +264,10 @@ impl WebServer {
                             let username : &str = path_str.slice_from(18);
                             WebServer::deduct_points_to_user(stream, username, point_map1);
                             WebServer::update_points_table(point_map2);
+                        } else if path_str.starts_with("./view_points") {
+                            debug!("=======view_points===========");
+                            let username : &str = path_str.slice_from(23);
+                            WebServer::view_points(stream, username, point_map1);
                         } else {
                             debug!("===== Static Page request =====");
                             WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
@@ -325,7 +329,7 @@ impl WebServer {
         };
 
         file.write_line(file_read.read_to_str()+username.to_owned().clone() + "," + password.to_owned().clone());
-        
+
         /* add new account info to user_map */
         let (username_port, username_chan) = Chan::new();
         let (password_port, password_chan) = Chan::new();
@@ -484,6 +488,25 @@ impl WebServer {
                           local_points.insert(received_name.to_owned(), start_point);
                           received_stream.write(HTTP_OK.as_bytes());
                 },
+            };
+        });
+    }
+
+
+    fn view_points(stream: Option<std::io::net::tcp::TcpStream>, username: &str, point_map: MutexArc<HashMap<~str, int>>) {
+        let (username_port, username_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
+        username_chan.send(username.to_owned());
+        stream_chan.send(stream);
+        point_map.access(|local_point_map| {
+            let received_name = username_port.recv();
+            let mut received_stream = stream_port.recv();
+            match local_point_map.find(&received_name) {
+                Some(point) => { received_stream.write(HTTP_OK.as_bytes());
+                                 let result_str : ~str = point.clone().to_str();
+                                 received_stream.write(result_str.as_bytes());
+                },
+                None => received_stream.write(HTTP_BAD.as_bytes()),
             };
         });
     }

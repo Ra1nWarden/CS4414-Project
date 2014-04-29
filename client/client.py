@@ -3,6 +3,7 @@ import datetime
 from subprocess import call
 import os
 import time
+import getpass
 import string
 
 address = "http://127.0.0.1:4414"
@@ -30,11 +31,12 @@ class CommandReader:
             else:
                 print "Invalid option!"
     def login_init(self):
-        while self.username is None:
+        while True:
             username_entry = raw_input("Username: ")
-            password_entry = raw_input("Password: ")
+            password_entry = getpass.getpass("Password: ")
             if self.login(username_entry, password_entry):
                 self.username = username_entry
+                break
             else:
                 print "Invalid username/password combination!"
         self.prompt()
@@ -43,7 +45,7 @@ class CommandReader:
             print "Menu"
             print "1. Retrieve pending questions"
             print "2. Send a question"
-            print "3. View friend list"
+            print "3. View your points"
             print "4. Exit"
             input_option = raw_input("Please enter your selection: ").strip()
             if input_option == "1":
@@ -51,7 +53,7 @@ class CommandReader:
             elif input_option == "2":
                 self.send_msg()
             elif input_option == "3":
-                self.view_friends()
+                self.view_points()
             elif input_option == "4":
                 break
             else:
@@ -191,6 +193,15 @@ class CommandReader:
             print "Question Sent!"
         else:
             print "An error occurred. Please try again."
+
+    def view_points(self):
+        args = {}
+        args['username'] = self.username
+        r = requests.get(address + '/view_points', params=args)
+        if r.status_code == 200:
+            print "Current point for " + self.username + ": " + r.text
+        else:
+            print "Error retrieving point for user " + self.username
     # def view_friends(self):
 
 
